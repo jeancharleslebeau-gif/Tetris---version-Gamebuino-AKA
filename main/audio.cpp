@@ -1,106 +1,196 @@
+#define USE_I2S_AUDIO   
+
 /*
 ===============================================================================
-  audio.cpp — Implémentation du système audio (buzzer PWM) pour Tetris AKA
--------------------------------------------------------------------------------
-  Rôle :
-    - Initialiser le PWM via LEDC (timer + canal dédiés).
-    - Fournir tone(), click(), audio_line_clear(), etc.
-    - Ne pas interférer avec :
-        * le PWM du LCD (LEDC_TIMER_0 / CHANNEL_0)
-        * l’I2C (expander)
-        * le LCD i80 (DMA + interruptions)
-    - Volume global simple (0..8)
+  audio.cpp — Système audio Tetris AKA (I2S + square wave)
 ===============================================================================
 */
 
 #include "audio.h"
-#include "driver/ledc.h"
+#include "gb_ll_audio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <math.h>
+#include <string.h>
+#include "esp_random.h"
+#include "audio_pmf.h"
 
 // -----------------------------------------------------------------------------
-//  CONFIG LEDC AUDIO (centralisé)
+// Volume global SFX (0..8)
 // -----------------------------------------------------------------------------
-#define AUDIO_LEDC_TIMER      LEDC_TIMER_3
-#define AUDIO_LEDC_CHANNEL    LEDC_CHANNEL_3
-#define AUDIO_LEDC_MODE       LEDC_LOW_SPEED_MODE
-#define AUDIO_LEDC_GPIO       4
+static int g_volume = 8;
 
-static int g_volume = 8; // 0..8
+// Tâche PMF
+static TaskHandle_t s_pmf_task = nullptr;
 
 // -----------------------------------------------------------------------------
-//  Initialisation LEDC
+// Mapping volume SFX (0..8) -> volume TAS2505 (0..255)
 // -----------------------------------------------------------------------------
-void audio_init()
+static inline uint8_t map_sfx_volume(int v)
 {
-    ledc_timer_config_t timer = {
-        .speed_mode       = AUDIO_LEDC_MODE,
-        .duty_resolution  = LEDC_TIMER_10_BIT,
-        .timer_num        = AUDIO_LEDC_TIMER,
-        .freq_hz          = 2000,
-        .clk_cfg          = LEDC_AUTO_CLK
-    };
-    ledc_timer_config(&timer);
-
-    ledc_channel_config_t ch = {
-        .gpio_num       = AUDIO_LEDC_GPIO,
-        .speed_mode     = AUDIO_LEDC_MODE,
-        .channel        = AUDIO_LEDC_CHANNEL,
-        .timer_sel      = AUDIO_LEDC_TIMER,
-        .duty           = 0,
-        .hpoint         = 0
-    };
-    ledc_channel_config(&ch);
+    if (v <= 0) return 0;      // mute
+    if (v >= 8) return 255;    // max
+    return (uint8_t)(v * 32);  // 0,32,64,...,256
 }
 
 // -----------------------------------------------------------------------------
-//  Volume global
+// Tâche PMF
 // -----------------------------------------------------------------------------
-void audio_set_volume(int v)
+static void pmf_task(void* arg)
 {
-    g_volume = (v < 0 ? 0 : (v > 8 ? 8 : v));
-}
-
-// -----------------------------------------------------------------------------
-//  Tone générique
-// -----------------------------------------------------------------------------
-void tone(int freq, int ms, int duty)
-{
-    if(freq <= 0 || g_volume == 0)
+    (void)arg;
+    while (true)
     {
-        ledc_stop(AUDIO_LEDC_MODE, AUDIO_LEDC_CHANNEL, 0);
+        audio_pmf_update();           // fait tourner le player PMF
+        vTaskDelay(pdMS_TO_TICKS(5)); // toutes les ~5 ms
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Synthèse PCM simple (square + noise)
+// -----------------------------------------------------------------------------
+
+static void generate_square(int16_t* buf, int samples, int freq, int sample_rate, int amp)
+{
+    if (freq <= 0) {
+        memset(buf, 0, samples * sizeof(int16_t));
         return;
     }
 
-    int eff_duty = duty > 0 ? duty : (g_volume * 64);
+    float period = (float)sample_rate / (float)freq;
+    float phase = 0.0f;
 
-    ledc_set_freq(AUDIO_LEDC_MODE, AUDIO_LEDC_TIMER, freq);
-    ledc_set_duty(AUDIO_LEDC_MODE, AUDIO_LEDC_CHANNEL, eff_duty);
-    ledc_update_duty(AUDIO_LEDC_MODE, AUDIO_LEDC_CHANNEL);
+    for (int i = 0; i < samples; ++i) {
+        buf[i] = (phase < period / 2.0f) ? amp : -amp;
+        phase += 1.0f;
+        if (phase >= period) phase -= period;
+    }
+}
 
-    if(ms > 0)
-    {
-        vTaskDelay(pdMS_TO_TICKS(ms));
-        ledc_set_duty(AUDIO_LEDC_MODE, AUDIO_LEDC_CHANNEL, 0);
-        ledc_update_duty(AUDIO_LEDC_MODE, AUDIO_LEDC_CHANNEL);
+static void generate_noise(int16_t* buf, int samples, int amp)
+{
+    for (int i = 0; i < samples; ++i) {
+        int r = (esp_random() & 0xFFFF) - 32768;
+        buf[i] = (int16_t)((r * amp) / 32768);
     }
 }
 
 // -----------------------------------------------------------------------------
-//  Sons utilitaires
+// Tone simple
 // -----------------------------------------------------------------------------
-void click()            { tone(1200, 40); }
-void audio_hard_drop()  { tone(1500, 50); }
+void tone(int freq, int ms, int duty)
+{
+#ifdef USE_I2S_AUDIO
+    if (g_volume <= 0 || ms <= 0) return;
+
+    const int sample_rate = GB_AUDIO_SAMPLE_RATE;
+    int total_samples = (sample_rate * ms) / 1000;
+    if (total_samples <= 0) return;
+
+    int amp = (g_volume * 3000) / 8;
+
+    int16_t buf[GB_AUDIO_BUFFER_SAMPLE_COUNT];
+
+    while (total_samples > 0) {
+        int chunk = total_samples;
+        if (chunk > GB_AUDIO_BUFFER_SAMPLE_COUNT)
+            chunk = GB_AUDIO_BUFFER_SAMPLE_COUNT;
+
+        generate_square(buf, chunk, freq, sample_rate, amp);
+        gb_ll_audio_push_buffer(buf);
+
+        total_samples -= chunk;
+    }
+#else
+    (void)freq; (void)ms; (void)duty;
+#endif
+}
 
 // -----------------------------------------------------------------------------
-//  Sons de lignes
+// API publique
 // -----------------------------------------------------------------------------
+void audio_init()
+{
+    g_volume = 8; // valeur par défaut
+
+#ifdef USE_I2S_AUDIO
+    // IMPORTANT : appliquer le volume matériel AVANT le PMF
+    uint8_t hw = map_sfx_volume(g_volume);
+    gb_ll_audio_set_volume(hw);
+#endif
+
+    // Init du player PMF
+    audio_pmf_init();
+
+    // Tâche PMF
+    if (s_pmf_task == nullptr)
+    {
+        xTaskCreate(pmf_task, "pmf_audio", 4096, nullptr, 4, &s_pmf_task);
+    }
+}
+
+void audio_set_volume(int v)
+{
+    if (v < 0) v = 0;
+    if (v > 8) v = 8;
+    g_volume = v;
+
+#ifdef USE_I2S_AUDIO
+    uint8_t hw = map_sfx_volume(v);
+    gb_ll_audio_set_volume(hw);
+#endif
+}
+
+// -----------------------------------------------------------------------------
+// SFX
+// -----------------------------------------------------------------------------
+void click()               { tone(1200, 40, 0); }
+void audio_move()          { tone(900,  30, 0); }
+void audio_rotate()        { tone(1100, 40, 0); }
+void audio_soft_drop()     { tone(700,  20, 0); }
+void audio_hard_drop()     { tone(1500, 60, 0); }
+void audio_lock()          { tone(500,  50, 0); }
+void audio_level_up()      { tone(1600,150, 0); }
+void audio_game_over_sfx() { tone(200, 400, 0); }
+
 void audio_line_clear(int n)
 {
-    if(n <= 0) return;
+#ifdef USE_I2S_AUDIO
+    if (n <= 0 || g_volume <= 0) return;
 
-    static const int freq[5] = { 0, 600, 800, 1000, 1200 };
-    static const int dur [5] = { 0, 40, 40, 60, 80   };
+    const int sample_rate = GB_AUDIO_SAMPLE_RATE;
+    int ms = (n == 1 ? 80 : n == 2 ? 120 : n == 3 ? 160 : 220);
+    int total_samples = (sample_rate * ms) / 1000;
+    if (total_samples <= 0) return;
 
-    tone(freq[n > 4 ? 4 : n], dur[n > 4 ? 4 : n]);
+    int amp_sq = (g_volume * 2500) / 8;
+    int amp_ns = (g_volume * 1500) / 8;
+
+    int16_t buf_sq[GB_AUDIO_BUFFER_SAMPLE_COUNT];
+    int16_t buf_ns[GB_AUDIO_BUFFER_SAMPLE_COUNT];
+    int16_t mix   [GB_AUDIO_BUFFER_SAMPLE_COUNT];
+
+    int freq = (n == 1 ? 600 : n == 2 ? 800 : n == 3 ? 1000 : 1300);
+
+    while (total_samples > 0) {
+        int chunk = total_samples;
+        if (chunk > GB_AUDIO_BUFFER_SAMPLE_COUNT)
+            chunk = GB_AUDIO_BUFFER_SAMPLE_COUNT;
+
+        generate_square(buf_sq, chunk, freq, sample_rate, amp_sq);
+        generate_noise (buf_ns, chunk, amp_ns);
+
+        for (int i = 0; i < chunk; ++i) {
+            int s = (int)buf_sq[i] + (int)buf_ns[i];
+            if (s > 32767) s = 32767;
+            if (s < -32768) s = -32768;
+            mix[i] = (int16_t)s;
+        }
+
+        gb_ll_audio_push_buffer(mix);
+        total_samples -= chunk;
+    }
+#else
+    (void)n;
+#endif
 }

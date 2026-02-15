@@ -1,6 +1,7 @@
 set(COMPONENT_SRCS
     app_main.cpp
     task_game.cpp
+    audio_pmf.cpp
     game.cpp
     game_state.cpp
     audio.cpp

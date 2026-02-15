@@ -1,18 +1,18 @@
 /*
 ===============================================================================
-  game_logic.cpp — Tetris Logic (AKA Edition — Version SRS + Lock Delay)
+  game_logic.cpp — Tetris Logic (AKA Edition — Version Audio Intégrée)
 -------------------------------------------------------------------------------
-  Inclus :
-    - Collision sol / murs / blocs
-    - Lock delay (500 ms)
-    - Gravité indépendante du framerate
-    - Soft drop (↓)
-    - Hard drop (↑)
-    - Rotation SRS Guideline (I + JLSTZ)
-    - Clear lines + scoring
-    - Nouvelle pièce + preview
-    - Synchronisation vers GameState (rendu)
-    - Utilise pieces.h comme source unique des pièces
+  - Collision sol / murs / blocs
+  - Lock delay
+  - Gravité dynamique selon niveau
+  - Soft drop / Hard drop
+  - Rotation
+  - Clear lines + scoring
+  - Level up + sons
+  - Game Over + son
+  - Next piece
+  - Preview
+  - Synchronisation vers GameState
 ===============================================================================
 */
 
@@ -20,17 +20,18 @@
 #include "input.h"
 #include "graphics.h"
 #include "game_state.h"
-#include "pieces.h"        // ⭐ Source unique des pièces + kicks SRS
+#include "pieces.h"
+#include "audio.h"
 #include "esp_timer.h"
 #include "esp_random.h"
+#include "audio_pmf.h"
 #include <string.h>
 
 // -----------------------------------------------------------------------------
 // Constantes
 // -----------------------------------------------------------------------------
-static constexpr int LOCK_DELAY_MS       = 500;
-static int GRAVITY_INTERVAL_MS = 500;   // initialisation de la vitesse pour le niveau 1
-static constexpr int SOFT_DROP_SPEED     = 1;
+static int  GRAVITY_INTERVAL_MS = 500;   // modifiable selon niveau
+static constexpr int LOCK_DELAY_MS      = 500;
 
 // -----------------------------------------------------------------------------
 // Grille logique interne (20×10)
@@ -70,7 +71,7 @@ static bool collide(int x, int y, int rot)
 }
 
 // -----------------------------------------------------------------------------
-// Rotation SRS
+// Rotation
 // -----------------------------------------------------------------------------
 static bool try_rotate(int dir)
 {
@@ -91,6 +92,7 @@ static bool try_rotate(int dir)
             curY = ny;
             curRot = newRot;
             lockStartTime = -1;
+            audio_rotate();
             return true;
         }
     }
@@ -104,30 +106,19 @@ static void new_piece()
 {
     auto& S = game_state();
 
-    // La pièce courante devient la "nextPiece"
     curPiece = S.nextPiece;
     curRot   = 0;
     curX     = 3;
     curY     = -2;
     lockStartTime = -1;
 
-    // Tirage de la prochaine pièce
     S.nextPiece = esp_random() % 7;
 
-    // Synchronisation immédiate
     S.currentPiece = curPiece;
     S.currentRot   = curRot;
     S.currentX     = curX;
     S.currentY     = curY;
 
-    // Game Over si spawn impossible
-    if (collide(curX, curY, curRot))
-    {
-        memset(grid, 0, sizeof(grid));
-        memset(S.field, 0, sizeof(S.field));
-        S.hasDied = true;
-        return;
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -135,6 +126,9 @@ static void new_piece()
 // -----------------------------------------------------------------------------
 static void lock_piece()
 {
+    auto& S = game_state();
+    bool died = false;
+
     for (int py = 0; py < 4; py++)
     for (int px = 0; px < 4; px++)
     {
@@ -144,13 +138,27 @@ static void lock_piece()
         int gx = curX + px;
         int gy = curY + py;
 
+        // Si un bloc est au-dessus de la grille visible -> Game Over
+        if (gy < 0) {
+            died = true;
+            continue; // on ne l’écrit pas dans la grille
+        }
+
         if (gy >= 0)
             grid[gy][gx] = curPiece + 1;
+    }
+
+    audio_lock();
+
+    if (died)
+    {
+        S.hasDied = true;
+        audio_game_over_sfx();
     }
 }
 
 // -----------------------------------------------------------------------------
-// Clear lines + scoring
+// Clear lines + scoring + level up
 // -----------------------------------------------------------------------------
 static void clear_lines()
 {
@@ -169,7 +177,6 @@ static void clear_lines()
             cleared++;
             for (int yy = y; yy > 0; yy--)
                 memcpy(grid[yy], grid[yy - 1], TETRIS_COLS);
-
             memset(grid[0], 0, TETRIS_COLS);
             y++;
         }
@@ -182,36 +189,39 @@ static void clear_lines()
         S.linesCleared += cleared;
         S.score        += cleared * 100;
 
-        // Passage de niveau : toutes les 10 lignes
+        audio_line_clear(cleared);
+
         int newLevel = 1 + S.linesCleared / 10;
 
         if (newLevel != S.currentLevel)
         {
             S.currentLevel = newLevel;
+            audio_level_up();
 
-            // Accélération de la gravité (simple, stable)
-            // Exemple : niveau 1 = 500ms, niveau 2 = 450ms, etc.
-            // Minimum 80ms pour éviter l'insta-drop
-            int newGravity = 500 - (newLevel - 1) * 50;
-            if (newGravity < 80)
-                newGravity = 80;
+            GRAVITY_INTERVAL_MS = 500 - (newLevel - 1) * 40;
+            if (GRAVITY_INTERVAL_MS < 80)
+                GRAVITY_INTERVAL_MS = 80;
 
-            // On met à jour la variable globale
-            GRAVITY_INTERVAL_MS = newGravity;
+            audio_pmf_set_level(S.currentLevel);
         }
     }
 }
-
 
 // -----------------------------------------------------------------------------
 // Hard drop
 // -----------------------------------------------------------------------------
 static void hard_drop()
 {
+    auto& S = game_state();
+
     while (!collide(curX, curY + 1, curRot))
         curY++;
 
+    audio_hard_drop();
+
     lock_piece();
+    if (S.hasDied) return;   // <<< IMPORTANT
+
     clear_lines();
     new_piece();
 }
@@ -232,10 +242,10 @@ void logic_reset()
     S.hasDied      = false;
     S.hasWon       = false;
 
-    // Première nextPiece
+    audio_pmf_set_level(S.currentLevel);
+
     S.nextPiece = esp_random() % 7;
 
-    // Première pièce courante
     curPiece = S.nextPiece;
     curRot   = 0;
     curX     = 3;
@@ -255,39 +265,48 @@ void logic_reset()
 // -----------------------------------------------------------------------------
 void game_update_logic()
 {
+    auto& S = game_state();
+
+    // Si on est mort, on ne met plus à jour la logique
+    if (S.hasDied)
+        return;
+
     int64_t now = esp_timer_get_time() / 1000;
 
-    // --- Déplacements horizontaux ---
+    // Déplacement horizontal
     if (button_pressed(BTN_LEFT) && !collide(curX - 1, curY, curRot))
     {
         curX--;
         lockStartTime = -1;
+        audio_move();
     }
 
     if (button_pressed(BTN_RIGHT) && !collide(curX + 1, curY, curRot))
     {
         curX++;
         lockStartTime = -1;
+        audio_move();
     }
 
-    // --- Rotation ---
+    // Rotation
     if (button_pressed(BTN_A))
         try_rotate(+1);
 
-    // --- Hard drop ---
+    // Hard drop
     if (button_pressed(BTN_UP))
     {
         hard_drop();
         goto sync_state;
     }
 
-    // --- Soft drop ---
+    // Soft drop
     if (button_down(BTN_DOWN))
     {
         if (!collide(curX, curY + 1, curRot))
         {
             curY++;
             lockStartTime = -1;
+            audio_soft_drop();
         }
         else
             goto handle_lock;
@@ -295,7 +314,7 @@ void game_update_logic()
         goto sync_state;
     }
 
-    // --- Gravité normale ---
+    // Gravité
     if (now - lastGravityTime >= GRAVITY_INTERVAL_MS)
     {
         lastGravityTime = now;
@@ -311,7 +330,6 @@ void game_update_logic()
 
     goto sync_state;
 
-    // --- Lock delay ---
 handle_lock:
     if (lockStartTime < 0)
         lockStartTime = now;
@@ -319,30 +337,18 @@ handle_lock:
     if (now - lockStartTime >= LOCK_DELAY_MS)
     {
         lock_piece();
+		if (S.hasDied) return;
         clear_lines();
-		// Détection de pile trop haute
-		for (int x = 0; x < TETRIS_COLS; x++)
-		{
-			if (grid[0][x] != 0)   // ligne du haut
-			{
-				auto& S = game_state();
-				S.hasDied = true;
-				return;
-			}
-		}
         new_piece();
     }
 
-    // --- Synchronisation vers GameState ---
 sync_state:
-    auto& S = game_state();
-
     S.currentPiece = curPiece;
     S.currentRot   = curRot;
     S.currentX     = curX;
     S.currentY     = curY;
 
     for (int y = 0; y < TETRIS_ROWS; ++y)
-        for (int x = 0; x < TETRIS_COLS; ++x)
-            S.field[y][x] = grid[y][x];
+    for (int x = 0; x < TETRIS_COLS; ++x)
+        S.field[y][x] = grid[y][x];
 }
