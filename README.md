@@ -39,7 +39,7 @@ Tetris---version-Gamebuino-AKA/
 Point d’entrée du jeu, initialisation matériel, boucle principale.
 - components/
 Modules ESP‑IDF (rendu, logique, entrée utilisateur…).
-(sour de JMP: )
+(sources de JMP42: https://github.com/jmp42/Gamebuino_AKA_lib)
 - Assets/pmf/
 Musiques du jeu intégrées en binaire.
 
@@ -71,6 +71,7 @@ Les fichiers .pmf ont été convertis en .h, ce qui permet :
 - une inclusion directe dans le firmware
 - une lecture sans avoir à accéder au système de fichiers
 - une décompression/lecture streaming efficace
+
 
 
 
