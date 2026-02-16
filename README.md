@@ -17,6 +17,7 @@ Ressources audio PMF intégrées dans Assets/pmf/.
 
 🗂️ Arborescence
 
+```
 Tetris---version-Gamebuino-AKA/
 ├── components/
 ├── main/
@@ -33,6 +34,7 @@ Tetris---version-Gamebuino-AKA/
 ├── partitions.csv
 ├── sdkconfig
 └── README.md
+```
 
 🧭 Architecture logicielle
 
@@ -72,6 +74,7 @@ Les fichiers .pmf ont été convertis en .h, ce qui permet :
 - une inclusion directe dans le firmware
 - une lecture sans avoir à accéder au système de fichiers
 - une décompression/lecture streaming efficace
+
 
 
 
