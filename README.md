@@ -16,11 +16,12 @@ Structure propre en modules ESP‑IDF (components/) et application (main/).
 Ressources audio PMF intégrées dans Assets/pmf/.
 
 🗂️ Arborescence
+
 Tetris---version-Gamebuino-AKA/
-├─ components/
-├─ main/
-├─ Assets/
-│   └─ pmf/
+├── components/
+├── main/
+├── Assets/
+│   └── pmf/
 │       ├── Tetris_1.h
 │       ├── Tetris_2.h
 │       ├── Tetris_3.h
@@ -28,10 +29,10 @@ Tetris---version-Gamebuino-AKA/
 │       ├── Tetris_gameover.h
 │       ├── Tetris_hiscore.h
 │       └── Tetris_title.h
-├─ CMakeLists.txt
-├─ partitions.csv
-├─ sdkconfig
-└─ README.md
+├── CMakeLists.txt
+├── partitions.csv
+├── sdkconfig
+└── README.md
 
 🧭 Architecture logicielle
 
@@ -71,6 +72,7 @@ Les fichiers .pmf ont été convertis en .h, ce qui permet :
 - une inclusion directe dans le firmware
 - une lecture sans avoir à accéder au système de fichiers
 - une décompression/lecture streaming efficace
+
 
 
 
