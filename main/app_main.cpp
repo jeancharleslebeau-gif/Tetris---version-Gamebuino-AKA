@@ -1,22 +1,22 @@
-	//===============================================================================
-	// app_main.cpp — Point d’entrée du moteur Tetris (AKA Edition)
-	//-------------------------------------------------------------------------------
-	//  Rôle :
-	//    - Initialiser l’ensemble du hardware (LCD, audio, input, SD, expander).
-	//    - Initialiser les modules génériques (graphics, audio, persist).
-	//    - Lancer les tâches FreeRTOS (jeu, input, audio).
-	//    - Fournir une boucle idle propre.
-	//
-	//  Auteur : Jean-Charles LEBEAU (Jicehel)
-	//    Création : 02/2026
-	//===============================================================================
+//===============================================================================
+// app_main.cpp — Point d’entrée du moteur Tetris (AKA Edition)
+//-------------------------------------------------------------------------------
+//  Rôle :
+//    - Initialiser l’ensemble du hardware (LCD, audio, input, SD, expander).
+//    - Initialiser les modules génériques (graphics, audio, persist).
+//    - Lancer les tâches FreeRTOS (jeu, input, audio).
+//    - Fournir une boucle idle propre.
+//
+//  Auteur : Jean-Charles LEBEAU (Jicehel)
+//    Création : 02/2026
+//===============================================================================
 
-	#include <stdio.h>
-	#include "freertos/FreeRTOS.h"
-	#include "freertos/task.h"
-	#include "input.h"
-	#include "audio.h"
-
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "input.h"
+#include "audio.h"
+#include "language.h"
 
 // -----------------------------------------------------------------------------
 //  Hardware AKA (lib Gamebuino AKA)
@@ -76,10 +76,13 @@ extern "C" void app_main(void)
 {
     printf("\n=============================================\n");
     printf("  Tetris — AKA Edition\n");
-    printf("  (c) Jean-Charles — Architecture modulaire\n");
+    printf("  (c) Jean-Charles — Février 2026\n");
     printf("=============================================\n\n");
 
     hardware_init();
+	
+	// Charger la langue depuis la NVS 
+	language_load_from_nvs();
 
     // -------------------------------------------------------------------------
     //  Création des tâches FreeRTOS

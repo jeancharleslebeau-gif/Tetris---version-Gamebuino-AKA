@@ -13,7 +13,10 @@
 #include "render.h"
 #include "graphics.h"
 #include "game_state.h"
-#include "pieces.h"     // ⭐ Source unique des pièces
+#include "pieces.h"
+#include "title_screen.h"
+#include "config.h"
+#include "language.h"   
 #include <string>
 
 // -----------------------------------------------------------------------------
@@ -65,12 +68,12 @@ static void render_grid()
 {
     auto& S = game_state();
 
-    for(int y = 0; y < TETRIS_ROWS; ++y)
+    for (int y = 0; y < TETRIS_ROWS; ++y)
     {
-        for(int x = 0; x < TETRIS_COLS; ++x)
+        for (int x = 0; x < TETRIS_COLS; ++x)
         {
             int v = S.field[y][x];
-            if(v != 0)
+            if (v != 0)
             {
                 int sx = GRID_X + x * BLOCK;
                 int sy = GRID_Y + y * BLOCK;
@@ -87,20 +90,20 @@ static void render_piece()
 {
     auto& S = game_state();
 
-    for(int py = 0; py < 4; ++py)
+    for (int py = 0; py < 4; ++py)
     {
-        for(int px = 0; px < 4; ++px)
+        for (int px = 0; px < 4; ++px)
         {
-            if(!piece_at(S.currentPiece, S.currentRot, py, px))
+            if (!piece_at(S.currentPiece, S.currentRot, py, px))
                 continue;
 
             int gx = S.currentX + px;
             int gy = S.currentY + py;
 
-            // ⭐ Ne pas dessiner les cases au-dessus de la grille
-            if(gy < 0 || gy >= TETRIS_ROWS)
+            // Ne pas dessiner les cases au-dessus de la grille
+            if (gy < 0 || gy >= TETRIS_ROWS)
                 continue;
-            if(gx < 0 || gx >= TETRIS_COLS)
+            if (gx < 0 || gx >= TETRIS_COLS)
                 continue;
 
             int sx = GRID_X + gx * BLOCK;
@@ -120,22 +123,22 @@ static void render_hud()
     int x = GRID_X + WELL_W + 20;
     int y = 20;
 
-    gfx_text(x, y, "TETRIS", COLOR_YELLOW);
+    gfx_text(x, y, tr(TextID::HUD_TITLE_TETRIS), COLOR_YELLOW);
     y += 20;
 
-    gfx_text(x, y, "Score:", COLOR_WHITE);
+    gfx_text(x, y, tr(TextID::HUD_SCORE), COLOR_WHITE);
     gfx_text(x, y + 12, std::to_string(S.score).c_str(), COLOR_LIGHTBLUE);
     y += 40;
 
-    gfx_text(x, y, "Lines:", COLOR_WHITE);
+    gfx_text(x, y, tr(TextID::HUD_LINES), COLOR_WHITE);
     gfx_text(x, y + 12, std::to_string(S.linesCleared).c_str(), COLOR_GREEN);
     y += 40;
 
-    gfx_text(x, y, "Level:", COLOR_WHITE);
+    gfx_text(x, y, tr(TextID::HUD_LEVEL), COLOR_WHITE);
     gfx_text(x, y + 12, std::to_string(S.currentLevel).c_str(), COLOR_PINK);
     y += 40;
 
-    gfx_text(x, y, "Next:", COLOR_WHITE);
+    gfx_text(x, y, tr(TextID::HUD_NEXT), COLOR_WHITE);
 }
 
 // -----------------------------------------------------------------------------
@@ -149,11 +152,11 @@ static void render_next_piece()
     int baseX = GRID_X + WELL_W + 20;
     int baseY = 160 + BLOCK;
 
-    for(int py = 0; py < 4; ++py)
+    for (int py = 0; py < 4; ++py)
     {
-        for(int px = 0; px < 4; ++px)
+        for (int px = 0; px < 4; ++px)
         {
-            if(piece_at(p, 0, py, px))
+            if (piece_at(p, 0, py, px))
             {
                 int sx = baseX + px * BLOCK;
                 int sy = baseY + py * BLOCK;
@@ -180,13 +183,14 @@ void render_game()
 }
 
 // -----------------------------------------------------------------------------
-//  Écran titre
+//  Écran titre (image 320×240)
 // -----------------------------------------------------------------------------
 void render_title()
 {
-    gfx_clear(COLOR_BLACK);
-    gfx_text_center(80, "TETRIS AKA", COLOR_YELLOW);
-    gfx_text_center(140, "Press A to start", COLOR_WHITE);
+    for (int y = 0; y < SCREEN_H; ++y)
+    for (int x = 0; x < SCREEN_W; ++x)
+        gfx_putpixel(x, y, title_screen[y][x]);
+
     gfx_flush();
 }
 
@@ -195,6 +199,6 @@ void render_title()
 // -----------------------------------------------------------------------------
 void render_game_over()
 {
-    gfx_text_center(120, "GAME OVER", COLOR_RED);
+    gfx_text_center(120, tr(TextID::GAME_OVER), COLOR_RED);
     gfx_flush();
 }

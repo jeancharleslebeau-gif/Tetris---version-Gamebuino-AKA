@@ -38,25 +38,37 @@ void gb_audio_track_tone::play_tone( float f32_frequency, float f32_volume, uint
 }
 
     //! start playing sound for duration(ms) and frequency(Hz) with effect on freq and volume. Note : volume range 0.0 to 1.0
-void gb_audio_track_tone::play_tone( float f32_start_frequency, float f32_end_frequency, float f32_start_volume,  float f32_end_volume, uint16_t u16_duration_ms, tone_type fx_type )
+void gb_audio_track_tone::play_tone(float f32_start_frequency,
+                                    float f32_end_frequency,
+                                    float f32_start_volume,
+                                    float f32_end_volume,
+                                    uint16_t u16_duration_ms,
+                                    tone_type fx_type)
 {
-    if ( is_playing() ) {
-        stop_playing(); // allow to break song, and start new
+    // Si déjà en train de jouer, on coupe proprement
+    if (is_playing()) {
+        stop_playing();
     }
-        
-        // convert 1 sinus period for 256 samples to user freq
-	u32_sin_inc_start = (uint32_t)(65536.0f*f32_start_frequency*256.0f/GB_AUDIO_SAMPLE_RATE);
-	u32_sin_inc_end = (uint32_t)(65536.0f*f32_end_frequency*256.0f/GB_AUDIO_SAMPLE_RATE);
-    i32_volume_start = BOUND(f32_start_volume, 0.0, 1.0)*65535;
-    i32_volume_end = BOUND(f32_end_volume, 0.0, 1.0)*65535;
+
+    // Incréments de phase
+    u32_sin_inc_start = (uint32_t)(65536.0f * f32_start_frequency * 256.0f / GB_AUDIO_SAMPLE_RATE);
+    u32_sin_inc_end   = (uint32_t)(65536.0f * f32_end_frequency   * 256.0f / GB_AUDIO_SAMPLE_RATE);
+
+    // Volumes
+    i32_volume_start = (int32_t)(BOUND(f32_start_volume, 0.0, 1.0) * 65535.0f);
+    i32_volume_end   = (int32_t)(BOUND(f32_end_volume,   0.0, 1.0) * 65535.0f);
+
     _fx_type = fx_type;
 
-    if ( !u32_sin_sample_total )
-        i32_cb_loop_count = 0;
-        // convert duration ms to sample count
-    u32_sin_sample_total = (uint32_t)(u16_duration_ms) * GB_AUDIO_SAMPLE_RATE / 1000;
-    u32_sin_sample_index = 0; // playback from begin
+    // Reset complet
+    i32_cb_loop_count    = 0;
+    u32_sin_sample_index = 0;
+    u32_sin_read_index   = 0;
+
+    // Durée en samples
+    u32_sin_sample_total = (uint32_t)u16_duration_ms * GB_AUDIO_SAMPLE_RATE / 1000;
 }
+
 
             // return playing state
 bool gb_audio_track_tone::is_playing()
@@ -69,38 +81,64 @@ bool gb_audio_track_tone::is_playing()
 void gb_audio_track_tone::stop_playing()
 {
     u32_sin_sample_total = 0;
-    u32_sin_read_index = 0;
+    u32_sin_sample_index = 0;
+    u32_sin_read_index   = 0;
+    i32_cb_loop_count    = 0;
 }
 
 
         //! buffer fill callback 
-int gb_audio_track_tone::play_callback( int16_t* pi16_buffer, uint16_t u16_sample_count )
+int gb_audio_track_tone::play_callback(int16_t* pi16_buffer, uint16_t u16_sample_count)
 {
-    if ( u32_sin_sample_total )
-    {
-        uint32_t u32_sin_inc = u32_sin_inc_start + ((int64_t)u32_sin_inc_end - (int64_t)u32_sin_inc_start)*u32_sin_sample_index/u32_sin_sample_total;
-        int32_t i32_volume = i32_volume_start + ((int64_t)i32_volume_end - (int64_t)i32_volume_start)*(int64_t)u32_sin_sample_index/(int64_t)u32_sin_sample_total;
-//        printf("vol %ld %ld/%ld\n", i32_volume, u32_sin_sample_index, u32_sin_sample_total);
-            // fill caller buffer with sine
-        const int16_t* i16_effect = i16_effect_tab[_fx_type&3];
-        for ( int i = 0 ; i < u16_sample_count ; i++ )
-            pi16_buffer[i] = i16_effect[((u32_sin_read_index+=u32_sin_inc)/65536)&0xFF]*i32_volume/65536;
-
-            // start playing : apply fade in to buffer ( progressive volume up )
-        if ( i32_cb_loop_count == 0 )
-            fade_in_buffer(pi16_buffer);
-
-            // count remaining of sample to generate
-        u32_sin_sample_index += u16_sample_count;
-        if ( u32_sin_sample_index >  u32_sin_sample_total ) // end of generation
-        {
-                // end of playing : apply fade out to buffer ( progressive volume down )
-            stop_playing();
-            fade_out_buffer(pi16_buffer);
-        }
-        i32_cb_loop_count++;
-        return 0; // success
+    if (!u32_sin_sample_total) {
+        // Silence explicite
+        for (int i = 0; i < u16_sample_count; ++i)
+            pi16_buffer[i] = 0;
+        return -1;
     }
-    return -1; // not playing
+
+    // Interpolation freq / volume
+    uint32_t u32_sin_inc = u32_sin_inc_start
+        + (uint32_t)(((int64_t)u32_sin_inc_end - (int64_t)u32_sin_inc_start)
+                     * (int64_t)u32_sin_sample_index
+                     / (int64_t)u32_sin_sample_total);
+
+    int32_t i32_volume = i32_volume_start
+        + (int32_t)(((int64_t)i32_volume_end - (int64_t)i32_volume_start)
+                    * (int64_t)u32_sin_sample_index
+                    / (int64_t)u32_sin_sample_total);
+
+    const int16_t* i16_effect = i16_effect_tab[_fx_type & 3];
+
+    // Nombre de samples réellement restants
+    uint32_t samples_left = u32_sin_sample_total - u32_sin_sample_index;
+    uint16_t to_generate  = (samples_left < u16_sample_count) ? (uint16_t)samples_left : u16_sample_count;
+
+    // Génération
+    for (int i = 0; i < to_generate; ++i) {
+        u32_sin_read_index += u32_sin_inc;
+        pi16_buffer[i] = (int16_t)(i16_effect[(u32_sin_read_index / 65536) & 0xFF]
+                                   * (int64_t)i32_volume / 65536);
+    }
+
+    // Silence sur la fin du buffer
+    for (int i = to_generate; i < u16_sample_count; ++i)
+        pi16_buffer[i] = 0;
+
+    // Fade-in sur le premier buffer
+    if (i32_cb_loop_count == 0)
+        fade_in_buffer(pi16_buffer);
+
+    u32_sin_sample_index += to_generate;
+
+    // Fin → fade-out + stop
+    if (u32_sin_sample_index >= u32_sin_sample_total) {
+        fade_out_buffer(pi16_buffer);
+        stop_playing();
+    }
+
+    i32_cb_loop_count++;
+    return 0;
 }
+
 

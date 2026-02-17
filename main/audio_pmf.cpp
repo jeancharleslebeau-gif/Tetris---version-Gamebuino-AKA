@@ -1,5 +1,5 @@
 #include "audio_pmf.h"
-
+#include "audio.h"
 #include "gb_audio_player.h"
 #include "gb_audio_track_pmf.h"
 #include "gb_audio_track_tone.h"
@@ -21,10 +21,8 @@
 // Player & pistes
 // -----------------------------------------------------------------------------
 
-static gb_audio_player     g_player;
-static gb_audio_track_pmf  g_track_music;
-static gb_audio_track_tone g_track_tone;
-static gb_audio_track_wav  g_track_wav;
+extern gb_audio_player     g_player;
+extern gb_audio_track_pmf  g_track_music;
 
 static MusicID        g_current_music      = MusicID::NONE;
 static uint8_t        g_current_level      = 1;
@@ -68,11 +66,6 @@ void audio_pmf_init()
 {
     // Volume maître par défaut
     g_player.set_master_volume(180);
-
-    // Enregistrer les pistes
-    g_player.add_track(&g_track_music);
-    g_player.add_track(&g_track_tone);
-    g_player.add_track(&g_track_wav);
 
     g_current_music    = MusicID::NONE;
     g_current_level    = 1;

@@ -45,7 +45,7 @@ Authors:
 #define LCD_FMARK      47
 
 #define LCD_PIN_nWR    21
-#define LCD_PIN_DnC   48
+#define LCD_PIN_DnC    48
 #define LCD_PIN_nRST   42 // connected to expander, mapped to CPU_MTMS => change this, use expander
 
 #define LCD_PIN_DB7   14

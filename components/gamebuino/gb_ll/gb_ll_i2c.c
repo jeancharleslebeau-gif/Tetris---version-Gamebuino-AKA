@@ -132,7 +132,12 @@ int gb_ll_i2c_init()
     if (ret2)
         printf( "i2c_master_bus_add_device return %d\n", ret2 );
 
-    if ( ret | ret0 | ret1 | ret2 )
-        return -1; // fail
-    return 0;
+    if (ret || ret0 || ret1 || ret2) {
+		printf("I2C init failed: %d %d %d %d\n", ret, ret0, ret1, ret2);
+		return -1;  // fail
+	} else {
+		printf("I2C init OK, audio addr=0x%02X\n", dev_cfg_audio.device_address);
+		return 0;   // success
+	}
+
 }

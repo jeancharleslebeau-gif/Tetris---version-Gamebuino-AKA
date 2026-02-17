@@ -38,7 +38,7 @@ Authors:
 //  Pour Tetris : laisser commenté
 //  Pour jeux avec musique : décommenter
 //
-// #define USE_I2S_AUDIO
+#define USE_I2S_AUDIO
 // ============================================================
 
 
@@ -81,6 +81,8 @@ void gb_core::init()
 
 #ifdef USE_I2S_AUDIO
     gb_ll_audio_init();
+	uint8_t v = gb_ll_audio_amp_read(0x00); 
+	printf("Probe TAS2505 reg0 -> 0x%02X\n", v);
 #endif
 }
 

@@ -23,7 +23,11 @@ enum {
     BTN_LEFT  = GB_KEY_LEFT,
     BTN_RIGHT = GB_KEY_RIGHT,
     BTN_UP    = GB_KEY_UP,
-    BTN_DOWN  = GB_KEY_DOWN
+    BTN_DOWN  = GB_KEY_DOWN,
+	BTN_RUN   = GB_KEY_RUN,
+    BTN_MENU  = GB_KEY_MENU,
+    BTN_L1    = GB_KEY_L1,
+    BTN_R1    = GB_KEY_R1
 };
 
 // -----------------------------------------------------------------------------
