@@ -1,278 +1,374 @@
 /*
 ===============================================================================
-  game.cpp — Gestion du jeu Tetris (AKA Edition)
+  game.cpp — Boucle principale et gestion des états (Tetris AKA)
 -------------------------------------------------------------------------------
   Rôle :
-    - Gérer les états simples : MENU, GAME, PAUSE, GAME OVER
-    - Appeler game_logic.cpp pour la logique Tetris
-    - Jouer / arrêter la musique selon l’état
-    - Afficher les écrans via render.cpp
-    - Gérer les volumes audio et la langue dans le menu PAUSE
+    - Gérer les états du jeu :
+        * Titre
+        * En jeu
+        * Pause
+        * Game Over
+    - Gérer les inputs (rotés en portrait pour le mode vertical)
+    - Gérer la rotation écran (orientation)
+    - Gérer le changement de langue
+    - Appeler le rendu (render.cpp)
 ===============================================================================
 */
 
 #include "game.h"
-#include "graphics.h"
-#include "input.h"
-#include "game_logic.h"
 #include "game_state.h"
-#include "audio.h"
+#include "game_logic.h"
 #include "render.h"
-#include "audio_pmf.h"
+#include "input_rotated.h"
 #include "language.h"
-#include "flags.h"
+#include "config.h"
+#include "graphics_rotated.h"
+#include "graphics.h"
+#include "audio.h"
+
+extern gb_core g_core;
 
 // -----------------------------------------------------------------------------
-// Volumes utilisateur (0..10)
+// État global
 // -----------------------------------------------------------------------------
-static uint8_t volume_music = 7;
-static uint8_t volume_sfx   = 6;
+static GameMode g_mode = GameMode::Title;
 
-// Index du menu pause :
-// 0 = musique
-// 1 = SFX
-// 2 = langue
-static int pause_menu_index = 0;
-
-// -----------------------------------------------------------------------------
-// États simples du jeu
-// -----------------------------------------------------------------------------
-enum GameScene {
-    SCENE_MENU,
-    SCENE_GAME,
-    SCENE_PAUSE,
-    SCENE_GAMEOVER
-};
-
-static GameScene scene = SCENE_MENU;
-
-// -----------------------------------------------------------------------------
-// Initialisation du jeu
-// -----------------------------------------------------------------------------
-void game_init()
+GameMode& game_mode()
 {
-    volume_music = 7;
-    volume_sfx   = 6;
-    pause_menu_index = 0;
-
-    audio_init();
-
-    audio_set_music_volume(volume_music);
-    audio_set_sfx_volume_silent(volume_sfx);
-
-    audio_play_music(MUSIC_MENU);
-
-    logic_reset();
+    return g_mode;
 }
 
 // -----------------------------------------------------------------------------
-// Update — logique principale selon la scène
+// Helpers
 // -----------------------------------------------------------------------------
-void game_update()
+static void start_new_game()
+{
+    logic_reset();
+    audio_play_music(MUSIC_GAME);
+    g_mode = GameMode::Playing;
+}
+
+
+static void go_to_title()
+{
+	audio_play_music(MUSIC_MENU);
+    g_mode = GameMode::Title;
+}
+
+// -----------------------------------------------------------------------------
+// Menu Pause
+// -----------------------------------------------------------------------------
+int pause_selection = 0;
+
+static void update_pause()
+{
+    // Sélecteur de fonction de lecture des boutons selon orientation
+    auto pressed = g_rotate_screen ? button_pressed_rot : button_pressed;
+
+    // Navigation (6 options : 0..5)
+    if (pressed(BTN_UP))
+        pause_selection = (pause_selection - 1 + 6) % 6;
+
+    if (pressed(BTN_DOWN))
+        pause_selection = (pause_selection + 1) % 6;
+
+    // Gauche = valeur précédente
+    if (pressed(BTN_LEFT))
+    {
+        switch (pause_selection)
+        {
+            case 0:
+                volume_music = (volume_music + 10) % 11;
+                audio_set_music_volume(volume_music);
+                break;
+
+            case 1:
+                volume_sfx = (volume_sfx + 10) % 11;
+                audio_set_sfx_volume(volume_sfx);
+                break;
+
+            case 2: language_prev(); break;
+
+            case 3:
+                g_rotate_screen = !g_rotate_screen;
+                save_config();
+                gfx_clear(COLOR_BLACK);   // <-- IMPORTANT
+                break;
+        }
+    }
+
+    // Droite = valeur suivante
+    if (pressed(BTN_RIGHT))
+    {
+        switch (pause_selection)
+        {
+            case 0:
+                volume_music = (volume_music + 1) % 11;
+                audio_set_music_volume(volume_music);
+                break;
+
+            case 1:
+                volume_sfx = (volume_sfx + 1) % 11;
+                audio_set_sfx_volume(volume_sfx);
+                break;
+
+            case 2: language_next(); break;
+
+            case 3:
+                g_rotate_screen = !g_rotate_screen;
+                save_config();
+                gfx_clear(COLOR_BLACK);   // <-- IMPORTANT
+                break;
+        }
+    }
+
+    // A = valider (reprendre / retour menu)
+	if (pressed(BTN_A))
+	{
+		if (pause_selection == 4) { 
+			audio_play_music(MUSIC_GAME);
+			g_mode = GameMode::Playing; 
+			return; 
+		}
+		if (pause_selection == 5) { 
+			go_to_title(); 
+			return; 
+		}
+	}
+
+    // B = retour menu direct
+    if (pressed(BTN_B))
+    {
+        go_to_title();
+        return;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Mise à jour du jeu en cours
+// -----------------------------------------------------------------------------
+static void update_playing()
 {
     auto& S = game_state();
 
-    switch (scene)
+    // Pause
+    if (button_pressed(BTN_MENU))
     {
-        // ---------------------------------------------------------------------
-        // MENU PRINCIPAL
-        // ---------------------------------------------------------------------
-        case SCENE_MENU:
-            if (button_pressed(BTN_A))
-            {
-                logic_reset();
-                audio_pmf_play(MusicID::GAME, true);
-                scene = SCENE_GAME;
-            }
+		audio_stop_music();
+        g_mode = GameMode::Paused;
+        pause_selection = 0;
+        return;
+    }
+
+    // -------------------------------------------------------------------------
+    // MODE HORIZONTAL (non roté) — mapping actuel (inchangé)
+    // -------------------------------------------------------------------------
+    if (!g_rotate_screen)
+    {
+        if (button_pressed(BTN_LEFT))
+            game_move_left();
+
+        if (button_pressed(BTN_RIGHT))
+            game_move_right();
+
+        // A : slow drop
+        if (button_pressed(BTN_A))
+            game_soft_drop();
+
+        // BAS : slow drop
+        if (button_pressed(BTN_DOWN))
+            game_soft_drop();
+
+        // D : fast drop
+        if (button_pressed(BTN_D))
+            game_hard_drop();
+
+        // C : rotation anti-horaire
+        if (button_pressed(BTN_C))
+            game_rotate_ccw();
+
+        // B : rotation horaire
+        if (button_pressed(BTN_B))
+            game_rotate_cw();
+    }
+
+    // -------------------------------------------------------------------------
+    // MODE VERTICAL (roté) — nouveau mapping joystick
+    // -------------------------------------------------------------------------
+    else
+    {
+        // Lecture joystick analogique
+        int rawY = g_core.joystick.get_y();
+        const int dead = 150;
+        int joyY = 0;
+        if (rawY >  dead) joyY = +1;
+        if (rawY < -dead) joyY = -1;
+
+        // --- Déplacement latéral via joystick ---
+        // Joystick vers le haut → gauche
+        if (joyY == +1)
+            game_move_left();
+
+        // Joystick vers le bas → droite
+        if (joyY == -1)
+            game_move_right();
+
+        // --- Slow drop ---
+ 
+        // D-Pad roté (DOWN roté = slow drop)
+        if (button_down_rot(BTN_DOWN))
+            game_soft_drop();
+			
+		if (g_core.buttons.pressed(gb_buttons::KEY_C))
+			game_soft_drop();	
+
+        // --- Hard drop ---
+        // Bouton A
+        if (g_core.buttons.pressed(gb_buttons::KEY_B))
+            game_hard_drop();
+
+        // --- Rotations ---
+        if (button_pressed_rot(BTN_LEFT))
+            game_rotate_ccw();
+
+        if (button_pressed_rot(BTN_RIGHT))
+            game_rotate_cw();
+    }
+
+    // Tick logique
+    game_tick();
+
+	// Game Over ?
+	if (S.hasDied)
+	{
+		audio_stop_music();
+		audio_game_over_sfx();
+		audio_play_music(MUSIC_GAMEOVER);
+		g_mode = GameMode::GameOver;
+	}
+
+    // Rendu jeu
+    render_game();
+}
+
+// -----------------------------------------------------------------------------
+// Mise à jour Game Over
+// -----------------------------------------------------------------------------
+static void update_game_over()
+{
+    render_game_over();
+
+    if (button_pressed(BTN_A) || button_pressed(BTN_MENU))
+        go_to_title();
+}
+
+// -----------------------------------------------------------------------------
+// Mise à jour écran titre
+// -----------------------------------------------------------------------------
+static void update_title()
+{
+    render_title(); // image de fond
+
+    auto lang = language_get();
+
+    // Ligne 1 : "Langue : Français"
+    char buf[64];
+    sprintf(buf, "%s : %s",
+            tr(TextID::PAUSE_LANGUAGE_LABEL),
+            language_name(lang));
+
+    gfx_text_rot(10, SCREEN_H - 40, buf, COLOR_WHITE);
+
+    // Ligne 2 : "< > : changer de langue   A : Jouer"
+    char hint[96];
+    sprintf(hint, "%s   %s",
+            tr(TextID::TITLE_HINT_CHANGE_LANG),
+            tr(TextID::TITLE_HINT_PLAY));
+
+    gfx_text_rot(10, SCREEN_H - 20, hint, COLOR_GRAY);
+
+    // Démarrer
+    if (button_pressed(BTN_A))
+        start_new_game();
+
+    // Changer langue
+    if (button_pressed(BTN_LEFT))
+        language_prev();
+
+    if (button_pressed(BTN_RIGHT))
+        language_next();
+}
+
+// -----------------------------------------------------------------------------
+// Boucle principale
+// -----------------------------------------------------------------------------
+void game_update()
+{
+    switch (g_mode)
+    {
+        case GameMode::Title:
+            update_title();
             break;
 
-        // ---------------------------------------------------------------------
-        // JEU EN COURS
-        // ---------------------------------------------------------------------
-        case SCENE_GAME:
-
-            if (button_pressed(BTN_MENU))
-            {
-                audio_pmf_stop();
-                scene = SCENE_PAUSE;
-                return;
-            }
-
-            game_update_logic();
-
-            if (S.hasDied)
-            {
-                audio_pmf_stop();
-                audio_game_over_sfx();
-                audio_pmf_play(MusicID::GAMEOVER, false);
-                scene = SCENE_GAMEOVER;
-                return;
-            }
+        case GameMode::Playing:
+            update_playing();
             break;
 
-        // ---------------------------------------------------------------------
-        // PAUSE
-        // ---------------------------------------------------------------------
-        case SCENE_PAUSE:
-        {
-            // Navigation entre les lignes
-            if (button_pressed(BTN_UP))
-            {
-                if (pause_menu_index > 0)
-                    pause_menu_index--;
-            }
-            if (button_pressed(BTN_DOWN))
-            {
-                if (pause_menu_index < 2)
-                    pause_menu_index++;
-            }
+        case GameMode::Paused:
+            update_pause();
+            break;
 
-            // Modification des valeurs
-            if (button_pressed(BTN_RIGHT))
-            {
-                if (pause_menu_index == 0)   // Volume musique
-                {
-                    if (volume_music < 10)
-                        volume_music++;
-
-                    audio_set_music_volume(volume_music);
-                }
-                else if (pause_menu_index == 1) // Volume SFX
-                {
-                    if (volume_sfx < 10)
-                        volume_sfx++;
-
-                    audio_set_sfx_volume(volume_sfx);
-                }
-                else if (pause_menu_index == 2) // Langue
-                {
-                    language_next();
-                }
-            }
-
-            if (button_pressed(BTN_LEFT))
-            {
-                if (pause_menu_index == 0)
-                {
-                    if (volume_music > 0)
-                        volume_music--;
-
-                    audio_set_music_volume(volume_music);
-                }
-                else if (pause_menu_index == 1)
-                {
-                    if (volume_sfx > 0)
-                        volume_sfx--;
-
-                    audio_set_sfx_volume(volume_sfx);
-                }
-                else if (pause_menu_index == 2)
-                {
-                    language_prev();
-                }
-            }
-
-            // Reprendre
-            if (button_pressed(BTN_A))
-            {
-                audio_play_music(MUSIC_GAME);
-                scene = SCENE_GAME;
-            }
-
-            // Retour menu principal
-            if (button_pressed(BTN_B))
-            {
-                logic_reset();
-                audio_play_music(MUSIC_MENU);
-                scene = SCENE_MENU;
-            }
-        }
-        break;
-
-        // ---------------------------------------------------------------------
-        // GAME OVER
-        // ---------------------------------------------------------------------
-        case SCENE_GAMEOVER:
-            if (button_pressed(BTN_A))
-            {
-                logic_reset();
-                audio_pmf_play(MusicID::MENU, true);
-                scene = SCENE_MENU;
-            }
+        case GameMode::GameOver:
+            update_game_over();
             break;
     }
 }
 
 // -----------------------------------------------------------------------------
-// Render — délégué à render.cpp sauf pour le menu de Pause
+// Initialisation du jeu (appelée par task_game)
+// -----------------------------------------------------------------------------
+void game_init()
+{
+    // Reset complet
+    game_state_reset();
+    logic_reset();
+
+    // État initial
+    g_mode = GameMode::Title;
+
+    // Charger langue + config
+    language_load_from_nvs();
+    load_config();
+
+    // --- AUDIO ---
+    audio_init();
+    audio_set_music_volume(volume_music);
+    audio_set_sfx_volume_silent(volume_sfx);
+    audio_play_music(MUSIC_MENU);
+}
+
+
+// -----------------------------------------------------------------------------
+// Rendu global (appelé par task_game)
 // -----------------------------------------------------------------------------
 void game_render()
 {
-    switch (scene)
+    switch (g_mode)
     {
-        case SCENE_MENU:
+        case GameMode::Title:
             render_title();
             break;
 
-        case SCENE_GAME:
+        case GameMode::Playing:
             render_game();
             break;
 
-        case SCENE_PAUSE:
-        {
-			gfx_clear(COLOR_BLACK);
+        case GameMode::Paused:
+            render_pause_menu();
+            gfx_flush();
+            break;
 
-			// Titre Pause (remonté de 10 px)
-			gfx_text_center(50, tr(TextID::PAUSE_TITLE), COLOR_WHITE);
-
-			// Position des lignes (remontées de 30 px)
-			const int y_music  = 90;
-			const int y_sfx    = 120;
-			const int y_lang   = 150;
-
-			// Curseur
-			int cursor_y = (pause_menu_index == 0) ? y_music :
-						   (pause_menu_index == 1) ? y_sfx : y_lang;
-
-			gfx_text(40, cursor_y, ">", COLOR_YELLOW);
-
-			// Affichage des valeurs
-			char buf[32];
-
-			sprintf(buf, "%s : %d", tr(TextID::PAUSE_MUSIC_LABEL), volume_music);
-			gfx_text(60, y_music, buf, COLOR_WHITE);
-
-			sprintf(buf, "%s : %d", tr(TextID::PAUSE_SFX_LABEL), volume_sfx);
-			gfx_text(60, y_sfx, buf, COLOR_WHITE);
-
-			// Langue
-			gfx_text(60, y_lang, tr(TextID::PAUSE_LANGUAGE_LABEL), COLOR_WHITE);
-
-			int flag_index = (int)language_get();
-			gfx_blitRegion(
-				flags_atlas,
-				FLAGS_ATLAS_WIDTH,
-				flag_index * FLAG_WIDTH, 0,
-				FLAG_WIDTH, FLAG_HEIGHT,
-				160, y_lang - 4
-			);
-
-			gfx_text(200, y_lang, language_name(language_get()), COLOR_WHITE);
-
-			// Boutons fixes A: et B:
-			char bufA[32];
-			sprintf(bufA, "A: %s", tr(TextID::PAUSE_BACK_TO_GAME));
-			gfx_text_center(200, bufA, COLOR_WHITE);
-
-			char bufB[32];
-			sprintf(bufB, "B: %s", tr(TextID::PAUSE_BACK_TO_MENU));
-			gfx_text_center(220, bufB, COLOR_WHITE);
-
-			gfx_flush();
-        }
-        break;
-
-        case SCENE_GAMEOVER:
+        case GameMode::GameOver:
             render_game_over();
             break;
     }

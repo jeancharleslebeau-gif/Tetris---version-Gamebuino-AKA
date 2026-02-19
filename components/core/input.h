@@ -20,6 +20,8 @@
 enum {
     BTN_A     = GB_KEY_A,
     BTN_B     = GB_KEY_B,
+    BTN_C     = GB_KEY_C,
+    BTN_D     = GB_KEY_D,	
     BTN_LEFT  = GB_KEY_LEFT,
     BTN_RIGHT = GB_KEY_RIGHT,
     BTN_UP    = GB_KEY_UP,

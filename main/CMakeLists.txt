@@ -1,6 +1,7 @@
 set(COMPONENT_SRCS
     app_main.cpp
     language.cpp
+    config.cpp
     task_game.cpp
     flags.cpp
     audio_pmf.cpp
@@ -9,9 +10,12 @@ set(COMPONENT_SRCS
     audio.cpp
     game_logic.cpp
     render.cpp
+    input_rotated.cpp
 )
 
-set(COMPONENT_ADD_INCLUDEDIRS ".")
+set(COMPONENT_ADD_INCLUDEDIRS
+    "."
+)
 
 idf_component_register(
     SRCS ${COMPONENT_SRCS}

@@ -1,4 +1,4 @@
-/*
+	/*
 ===============================================================================
   graphics.h — API graphique du moteur AKA
 -------------------------------------------------------------------------------
@@ -144,3 +144,4 @@ static constexpr Color COLOR_DARKBLUE   = 0x8200;
 static constexpr Color COLOR_LIGHTBLUE  = 0xFDCF;
 static constexpr Color COLOR_SILVER     = 0xBDF7;
 static constexpr Color COLOR_GOLD       = 0x159C;
+static constexpr Color COLOR_CYAN       = 0x07FF;

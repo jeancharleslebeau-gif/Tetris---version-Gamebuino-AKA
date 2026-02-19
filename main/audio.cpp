@@ -17,7 +17,11 @@
 #include "gb_audio_track_wav.h"
 
 #include "audio_pmf.h"
+#include "config.h"   
 
+// -----------------------------------------------------------------------------
+// Tâche PMF
+// -----------------------------------------------------------------------------
 static TaskHandle_t s_pmf_task = nullptr;
 
 static void pmf_task(void* arg)
@@ -31,7 +35,7 @@ static void pmf_task(void* arg)
 }
 
 // -----------------------------------------------------------------------------
-// Player & pistes (définition globale, visible par tout le projet)
+// Player & pistes (définition globale)
 // -----------------------------------------------------------------------------
 gb_audio_player     g_player;
 gb_audio_track_pmf  g_track_music;
@@ -39,10 +43,10 @@ gb_audio_track_tone g_track_tone;
 gb_audio_track_wav  g_track_wav;
 
 // -----------------------------------------------------------------------------
-// Volumes séparés (0..10)
+// Volumes globaux (définis dans config.cpp)
 // -----------------------------------------------------------------------------
-static int g_volume_music = 7;
-static int g_volume_sfx   = 6;
+extern uint8_t volume_music;   // 0..10
+extern uint8_t volume_sfx;     // 0..10
 
 static bool sfx_feedback_enabled = false;
 
@@ -53,7 +57,7 @@ static inline uint8_t map_music_volume_to_hw(int v)
 {
     if (v < 0) v = 0;
     if (v > 10) v = 10;
-    return (uint8_t)(v * 25);
+    return (uint8_t)(v * 25);   // 0..250
 }
 
 static inline float map_sfx_volume_to_float(int v)
@@ -70,7 +74,7 @@ void audio_set_sfx_volume_silent(int v)
 {
     if (v < 0) v = 0;
     if (v > 10) v = 10;
-    g_volume_sfx = v;
+    volume_sfx = v;
 }
 
 // -----------------------------------------------------------------------------
@@ -87,13 +91,13 @@ static void audio_enable_sfx_feedback()
 void audio_init()
 {
 #ifdef USE_I2S_AUDIO
-    gb_ll_audio_set_volume(map_music_volume_to_hw(g_volume_music));
+    gb_ll_audio_set_volume(map_music_volume_to_hw(volume_music));
 #endif
 
-    // Initialise PMF (charge les musiques, etc.)
+    // Initialise PMF
     audio_pmf_init();
 
-    // Ajout des pistes au player
+    // Ajout des pistes
     g_player.add_track(&g_track_music);
     g_player.add_track(&g_track_tone);
     g_player.add_track(&g_track_wav);
@@ -101,22 +105,20 @@ void audio_init()
     // Volume interne des pistes
     g_track_tone.set_track_volume(0.8f);
     g_track_wav.set_track_volume(0.8f);
-	
-	// -----------------------------------------------------------------------------
-	// Tâche PMF
-	// -----------------------------------------------------------------------------
-	if (s_pmf_task == nullptr)
-	{
-		xTaskCreatePinnedToCore(
-			pmf_task,
-			"pmf_audio",
-			4096,
-			nullptr,
-			4,
-			&s_pmf_task,
-			1   
-		);
-	}
+
+    // Tâche PMF
+    if (s_pmf_task == nullptr)
+    {
+        xTaskCreatePinnedToCore(
+            pmf_task,
+            "pmf_audio",
+            4096,
+            nullptr,
+            4,
+            &s_pmf_task,
+            1
+        );
+    }
 
     audio_enable_sfx_feedback();
 }
@@ -128,10 +130,11 @@ void audio_set_music_volume(int v)
 {
     if (v < 0) v = 0;
     if (v > 10) v = 10;
-    g_volume_music = v;
+
+    volume_music = v;
 
 #ifdef USE_I2S_AUDIO
-    gb_ll_audio_set_volume(map_music_volume_to_hw(v));
+    gb_ll_audio_set_volume(map_music_volume_to_hw(volume_music));
 #endif
 }
 
@@ -142,7 +145,8 @@ void audio_set_sfx_volume(int v)
 {
     if (v < 0) v = 0;
     if (v > 10) v = 10;
-    g_volume_sfx = v;
+
+    volume_sfx = v;
 
     if (sfx_feedback_enabled)
         tone(1000, 40, 0);
@@ -155,10 +159,10 @@ void tone(int freq, int ms, int duty)
 {
     (void)duty;
 
-    if (g_volume_sfx <= 0 || ms <= 0)
+    if (volume_sfx <= 0 || ms <= 0)
         return;
 
-    float vol = map_sfx_volume_to_float(g_volume_sfx);
+    float vol = map_sfx_volume_to_float(volume_sfx);
 
     g_track_tone.play_tone(
         freq,
@@ -201,9 +205,9 @@ void audio_game_over_sfx() { tone(200, 400, 0); }
 
 void audio_line_clear(int n)
 {
-    if (n <= 0 || g_volume_sfx <= 0) return;
+    if (n <= 0 || volume_sfx <= 0) return;
 
-    float vol = map_sfx_volume_to_float(g_volume_sfx);
+    float vol = map_sfx_volume_to_float(volume_sfx);
 
     int freq = (n == 1 ? 600 : n == 2 ? 800 : n == 3 ? 1000 : 1300);
     int ms   = (n == 1 ? 80  : n == 2 ? 120 : n == 3 ? 160  : 220);

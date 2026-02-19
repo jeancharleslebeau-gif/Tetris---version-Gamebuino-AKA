@@ -21,3 +21,6 @@ void render_title();
 
 // Rendu de l’écran Game Over
 void render_game_over();
+
+// Rendu de l'écran de pause / menu
+void render_pause_menu();

@@ -30,6 +30,10 @@ static const char* FR[] = {
     "Options",
     "Quitter",
 
+    "Appuyez sur A",
+    "Commencer",
+    "Continuer",
+
     "PAUSE",
     "Musique",
     "SFX",
@@ -45,6 +49,13 @@ static const char* FR[] = {
     "Lignes :",
     "Niveau :",
     "Suivant :",
+
+    "Orientation",
+    "Portrait",
+    "Paysage",
+
+    "< > : changer de langue",
+    "A : Jouer",
 };
 
 // --- Anglais -----------------------------------------------------------------
@@ -52,6 +63,10 @@ static const char* EN[] = {
     "Play",
     "Options",
     "Quit",
+
+    "Press A",
+    "Start",
+    "Continue",
 
     "PAUSE",
     "Music",
@@ -68,6 +83,13 @@ static const char* EN[] = {
     "Lines:",
     "Level:",
     "Next:",
+
+    "Orientation",
+    "Portrait",
+    "Landscape",
+	
+	"< > : change language", 
+	"A : Play",
 };
 
 // --- Allemand ----------------------------------------------------------------
@@ -75,6 +97,10 @@ static const char* DE[] = {
     "Spielen",
     "Optionen",
     "Beenden",
+
+    "Drücke A",
+    "Starten",
+    "Weiter",
 
     "PAUSE",
     "Musik",
@@ -91,6 +117,13 @@ static const char* DE[] = {
     "Linien:",
     "Level:",
     "Nächste:",
+
+    "Ausrichtung",
+    "Hochformat",
+    "Querformat",
+	
+	"< > : Sprache ändern",
+    "A : Starten",
 };
 
 // --- Italien -----------------------------------------------------------------
@@ -98,6 +131,10 @@ static const char* IT[] = {
     "Gioca",
     "Opzioni",
     "Esci",
+
+    "Premi A",
+    "Avvia",
+    "Continua",
 
     "PAUSA",
     "Musica",
@@ -114,6 +151,14 @@ static const char* IT[] = {
     "Linee:",
     "Livello:",
     "Prossimo:",
+
+    "Orientamento",
+    "Verticale",
+    "Orizzontale",
+	
+	"< > : cambia lingua",
+    "A : Gioca",
+
 };
 
 // --- Espagnol ----------------------------------------------------------------
@@ -121,6 +166,10 @@ static const char* ES[] = {
     "Jugar",
     "Opciones",
     "Salir",
+
+    "Pulsa A",
+    "Iniciar",
+    "Continuar",
 
     "PAUSA",
     "Música",
@@ -137,6 +186,14 @@ static const char* ES[] = {
     "Líneas:",
     "Nivel:",
     "Siguiente:",
+
+    "Orientación",
+    "Vertical",
+    "Horizontal",
+	
+	"< > : cambiar idioma",
+    "A : Jugar",
+
 };
 
 // --- Portugais ---------------------------------------------------------------
@@ -144,6 +201,10 @@ static const char* PT[] = {
     "Jogar",
     "Opções",
     "Sair",
+
+    "Pressione A",
+    "Iniciar",
+    "Continuar",
 
     "PAUSA",
     "Música",
@@ -160,6 +221,13 @@ static const char* PT[] = {
     "Linhas:",
     "Nível:",
     "Seguinte:",
+
+    "Orientação",
+    "Vertical",
+    "Horizontal",
+	
+	"< > : mudar idioma",
+    "A : Jogar",
 };
 
 // --- Danois ------------------------------------------------------------------
@@ -167,6 +235,10 @@ static const char* DK[] = {
     "Spil",
     "Indstillinger",
     "Afslut",
+
+    "Tryk A",
+    "Start",
+    "Fortsæt",
 
     "PAUSE",
     "Musik",
@@ -183,6 +255,13 @@ static const char* DK[] = {
     "Linjer:",
     "Niveau:",
     "Næste:",
+
+    "Retning",
+    "Portræt",
+    "Landskab",
+	
+	"< > : skift sprog",
+    "A : Spil",
 };
 
 // --- Néerlandais -------------------------------------------------------------
@@ -190,6 +269,10 @@ static const char* NL[] = {
     "Spelen",
     "Opties",
     "Afsluiten",
+
+    "Druk op A",
+    "Start",
+    "Doorgaan",
 
     "PAUZE",
     "Muziek",
@@ -206,6 +289,13 @@ static const char* NL[] = {
     "Lijnen:",
     "Niveau:",
     "Volgende:",
+
+    "Oriëntatie",
+    "Staand",
+    "Liggend",
+	
+	"< > : taal wijzigen",
+    "A : Spelen",
 };
 
 // -----------------------------------------------------------------------------
@@ -225,7 +315,7 @@ static const char** get_table(Language lang)
         case Language::NL: return NL;
 
         case Language::COUNT:
-            break; // valeur sentinelle, jamais utilisée
+            break;
     }
 
     return EN; // fallback
@@ -272,12 +362,12 @@ const char* language_name(Language lang)
 {
     switch (lang)
     {
-        case Language::FR: return "Français";
+        case Language::FR: return "Francais";
         case Language::EN: return "English";
         case Language::DE: return "Deutsch";
         case Language::IT: return "Italiano";
-        case Language::ES: return "Español";
-        case Language::PT: return "Português";
+        case Language::ES: return "Espanol";
+        case Language::PT: return "Portugues";
         case Language::DK: return "Dansk";
         case Language::NL: return "Nederlands";
 

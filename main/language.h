@@ -41,6 +41,11 @@ enum class TextID {
     MENU_OPTIONS,
     MENU_QUIT,
 
+    // Écran titre
+    TITLE_PRESS_A,
+    PRESS_A_START,
+    PRESS_A_CONTINUE,
+
     // Pause
     PAUSE_TITLE,
     PAUSE_MUSIC_LABEL,
@@ -59,7 +64,17 @@ enum class TextID {
     HUD_LINES,
     HUD_LEVEL,
     HUD_NEXT,
+
+    // Orientation écran (menu Pause)
+    PAUSE_ORIENTATION_LABEL,
+    PAUSE_ORIENTATION_ON,
+    PAUSE_ORIENTATION_OFF,
+	
+	// Écran titre — aides 
+	TITLE_HINT_CHANGE_LANG, 
+	TITLE_HINT_PLAY,
 };
+
 
 // -----------------------------------------------------------------------------
 //  API principale

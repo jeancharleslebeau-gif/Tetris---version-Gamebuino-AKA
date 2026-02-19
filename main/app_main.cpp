@@ -17,6 +17,7 @@
 #include "input.h"
 #include "audio.h"
 #include "language.h"
+#include "config.h"
 
 // -----------------------------------------------------------------------------
 //  Hardware AKA (lib Gamebuino AKA)
@@ -65,6 +66,8 @@ void hardware_init()
 
     printf("[HW] persist_init()...\n");
     persist_init();
+	
+	g_rotate_screen = false;   // mode paysage par défaut
 
     printf("=== HARDWARE INIT DONE ===\n\n");
 }
