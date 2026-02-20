@@ -1,7 +1,7 @@
 ﻿| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-H2 | ESP32-P4 | ESP32-S2 | ESP32-S3 |
 | ----------------- | ----- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- |
 
-# Tetris – version Gamebuino AKA
+# TAKATRIS – version Gamebuino AKA
 Portage du jeu Tetris pour plateforme Gamebuino AKA / ESP32. 
 Projet structuré pour l’ESP-IDF avec CMake, organisé en modules et ressources audio. Réalisé en février 2026. Done by Jicehel. [github.com]
 
@@ -74,6 +74,7 @@ Les fichiers .pmf ont été convertis en .h, ce qui permet :
 - une inclusion directe dans le firmware
 - une lecture sans avoir à accéder au système de fichiers
 - une décompression/lecture streaming efficace
+
 
 
 
